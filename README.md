@@ -33,7 +33,7 @@
 
 ## How to use
 
-1. run accounting_60_hxz.py
+1. run accounting_60_hxz.py (or accounting_60_hxz.ipynb, which I change a little bit)
 2. run all the single characteristic files (you can run them in parallel)
 3. run merge_chars.py
 4. run impute_rank_output_bckmk.py (you may want to comment the part of sp1500 in this file if you just need the all stocks version)
