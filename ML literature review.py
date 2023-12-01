@@ -18,6 +18,7 @@ from sklearn.decomposition import PCA
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.linear_model import Lasso
 from sklearn.linear_model import ElasticNet
+from sklearn.linear_model import SGDRegressor
 # import sklearn.preprocessing as sp
 # import sklearn.pipeline as pl
 import xgboost as xgb
@@ -25,9 +26,10 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.neural_network import MLPRegressor
 import tensorflow as tf
 from tensorflow.keras import regularizers
+
 import math
 import gc
-new_dir="D:\\replication\\datashare"
+new_dir="D:\\replication\\datashare" ##change for your path 
 os.chdir(new_dir)
 
  #############
@@ -87,6 +89,31 @@ def PLS(X_train,Y_train,X_test,n_component=2):
 #     model.fit(X_train,Y_train)
 #     Y_predict=model.predict(X_test)
 #     return Y_predict
+
+# def spline_basis(X, knots):
+#     basis_functions = []
+#     for knot in knots:
+#         basis_functions.append((X - knot) ** 2)
+#     basis_functions.insert(0, np.ones_like(X))  # 添加常数项1
+#     basis_functions.insert(1, X)  # 添加一次项z
+#     return np.concatenate(basis_functions, axis=1)
+
+# def Glm_lasso(X_train,Y_train,X_test,alpha=0.1,rou=0.5): # knots=5
+#     knots = [0, 1, 2, 3, 4]
+#     X_train_basis = spline_basis(X_train,knots)
+#     X_test_basis = spline_basis(X_test,knots)
+    
+#     # 使用带有Elastic Net惩罚的SGDRegressor拟合广义线性模型
+#     alpha = 0.1  # Group Lasso的正则化参数
+#     l1_ratio = 0.5  # Elastic Net的L1和L2的混合比例
+#     model = SGDRegressor(penalty='elasticnet', alpha=alpha, l1_ratio=l1_ratio, max_iter=1000, tol=1e-4)
+#     model.fit(X_train_basis, y_train)
+#     # 获取估计的回归系数
+#     theta_estimate = model.coef_
+#     # 使用估计的回归系数进行预测
+#     Y_prediction =np.dot(X_test_basis, theta_estimate)
+#     return Y_prediction
+
 
 def GBrt(X_train,Y_train,X_test,max_depth=2,n_trees=100,learning_rate=0.1,Huber_robust=False): #following xiu's paper, tree hyperparameters need to tune, include maximum depth, number of trees in ensemble and shrinking shrinkage weight(learning rate)  
     model = xgb.XGBRegressor(max_depth=max_depth,reg_lambda=1,n_estimators=n_trees,learning_rate=learning_rate,random_state=1) #reg_lambda=1 means training with l2 impurity. 
@@ -201,11 +228,11 @@ def nn5(X_train,Y_train,X_test,X_validation,Y_validation,l1=0.001,lr=0.01,random
 ###should input a panel data with columns of shocks id and rows of date, covering y prediction.    
 def profit_calculate(Ypredict,Y_test,decile=10):
     total_number=len(Ypredict.columns)
-    decile_number=total_number//decile  ##call numbers
     profit_list=pd.DataFrame(np.zeros((len(Ypredict.index),11)),columns=["low(L)","2","3","4","5","6","7","8","9","high(H)","H-L"])
         
     for i in range(len(Ypredict.index)):
-        produce_list=Ypredict.iloc[i].sort_values(ascending=1) #ascending sort
+        produce_list=Ypredict.iloc[i].dropna(inplace=False).sort_values(ascending=1) #ascending sort
+        decile_number=len(produce_list)//decile ##call numbers
         
         list_low=produce_list.index.values[:decile_number] # low
         list_2=produce_list.index.values[decile_number:decile_number*2]
@@ -246,7 +273,7 @@ def perf_evaluation(collect):
     column_name=list(collect.columns)
     #annual_return
 
-    annual_return=collect.sum()*12/len()
+    annual_return=collect.sum()*12/month_numbers
     
     #annual_volatility
     annual_volatility=collect.std()*(12**0.5)
@@ -260,9 +287,10 @@ def perf_evaluation(collect):
     for j in column_name:
         for i in range(month_numbers):
             #DR_value=collect.loc[i,j]-average_month[j]
-            DR_value=collect.loc[i,j]
+            date= collect.index[i]
+            DR_value=collect.loc[date,j]
             if DR_value <0:
-                DR_values.loc[i,j]=DR_value
+                DR_values.loc[date,j]=DR_value
     annual_DR=DR_values.std()*(12**0.5)
     #Sortino ratio
     
@@ -277,7 +305,8 @@ def perf_evaluation(collect):
         mdd=[]
         accumulate_list=[]
         for i in range(month_numbers):
-            accumulate+=collect.loc[i,j]
+            date= collect.index[i]
+            accumulate+=collect.loc[date,j]
             accumulate_list.append(accumulate)
             acc_max=max(accumulate_list)
             if accumulate==acc_max:
@@ -305,12 +334,15 @@ def perf_evaluation(collect):
  
 #chunk_size=100000
 #for chunk in pd.read_csv("datashare.csv",chunksize=chunk_size):
+    
+    
  ################################   
 #testing sample of coding process#
  ################################
-from sklearn.model_selection import train_test_split    
+# from sklearn.model_selection import train_test_split    
 #import data
-data_row= pd.read_csv("datashare.csv",nrows=5000)
+nrow=50000
+data_row= pd.read_csv("datashare.csv",nrows=nrow)
 factor_name=data_row.columns
 # from sklearn.model_selection import train_test_split
 
@@ -321,8 +353,20 @@ for i in range(7):
     data.iloc[:,i].fillna(value=data.iloc[:,i].mean(),inplace=True)
 X=data.iloc[:,:6]
 y=data.iloc[:,[0,1,6]]
-X_train_row, X_test_row, Y_train_row, Y_test_row = train_test_split(X, y, test_size=0.2, random_state=0)
-X_train_row, X_validation_row, Y_train_row, Y_validation_row = train_test_split(X_train_row, Y_train_row, test_size=0.2, random_state=0)
+
+## 60% training set, 20% validation set and 20% test set
+train_set_number=int(nrow*0.6)
+val_set_number=test_set_number=int(nrow*0.2)
+
+X_train_row=X.iloc[:train_set_number,:]
+X_validation_row=X.iloc[train_set_number:train_set_number+val_set_number,:]
+X_test_row=X.iloc[train_set_number+val_set_number:,:]
+
+Y_train_row=y.iloc[:train_set_number,:]
+Y_validation_row=y.iloc[train_set_number:train_set_number+val_set_number,:]
+Y_test_row=y.iloc[train_set_number+val_set_number:,:]
+# X_train_row, X_test_row, Y_train_row, Y_test_row = train_test_split(X, y, test_size=0.2, random_state=0)
+# X_train_row, X_validation_row, Y_train_row, Y_validation_row = train_test_split(X_train_row, Y_train_row, test_size=0.2, random_state=0)
 
  ################
 #replication code#
@@ -377,25 +421,77 @@ y_test_pred_nn3=nn3(X_train,Y_train,X_test,X_validation,Y_validation,l1=0.001,lr
 y_test_pred_nn4=nn4(X_train,Y_train,X_test,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
 y_test_pred_nn5=nn5(X_train,Y_train,X_test,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
 
-############ uncomplete ######### 
+
 ##convert to panel data taht columns of shocks id and rows of date, covering y prediction
-Y_test_row=Y_test_row.set_index(["DATE","permno"])[Y_test_row.columns[2]]
-Y_test_row=Y_test_row.unstack()
+Y_test_fram=Y_test_row.set_index(["DATE","permno"])[Y_test_row.columns[2]]
+Y_test_fram=Y_test_fram.unstack()
 
 
+# this function convert result of model prediction to panel data
+def panel_convert(y_test_pred_model,Y_test_row):
+    if type(y_test_pred_model)!= type(Y_test_row.iloc[:,0]):
+        y_test_pred_model=pd.DataFrame(y_test_pred_model,index=Y_test_row.index)
 
-y_test_pred_ols=pd.concat([Y_test_row.iloc[:,:2],Ols(X_train, Y_train, X_test)],axis=1)
+    y_test_pred=pd.concat([Y_test_row.iloc[:,:2],y_test_pred_model],axis=1)
+    y_test_pred=y_test_pred.set_index(["DATE","permno"])[y_test_pred.columns[2]]
+    y_test_pred=y_test_pred.unstack()
+    return y_test_pred
 
-y_test_pred_ols=y_test_pred_ols.set_index(["DATE","permno"])[y_test_pred_ols.columns[2]]
-y_test_pred_ols=y_test_pred_ols.unstack()
+
+#convert all prediction to panel dataframe
+pred_ols=panel_convert(y_test_pred_ols,Y_test_row)
+pred_ols_H=panel_convert(y_test_pred_ols_H,Y_test_row)
+pred_pcr=panel_convert(y_test_pred_pcr,Y_test_row)
+pred_pcr_H=panel_convert(y_test_pred_pcr_H,Y_test_row)
+pred_pls=panel_convert(y_test_pred_pls,Y_test_row)
+pred_gbrt=panel_convert(y_test_pred_gbrt,Y_test_row)
+pred_gbrt_H=panel_convert(y_test_pred_gbrt_H,Y_test_row)
+pred_rf=panel_convert(y_test_pred_rf,Y_test_row)
+pred_nn1=panel_convert(y_test_pred_nn1,Y_test_row)
+pred_nn2=panel_convert(y_test_pred_nn2,Y_test_row)
+pred_nn3=panel_convert(y_test_pred_nn3,Y_test_row)
+pred_nn4=panel_convert(y_test_pred_nn4,Y_test_row)
+pred_nn5=panel_convert(y_test_pred_nn5,Y_test_row)
 
 
+#zero_net_investment result and evaluation the performance
+def result_input(pred,Y_test_fram):
+    profit=profit_calculate(pred, Y_test_fram)
+    profit.index=Y_test_fram.index
+    #evaluation result
+    evaluation=perf_evaluation(profit)
 
-# #
+    return  evaluation
 
-profit_ols=profit_calculate(y_test_pred_ols, Y_test_row)
+##getting evaluation and output into Excel
+eval_ols=result_input(pred_ols,Y_test_fram)
+eval_ols_H=result_input(pred_ols_H,Y_test_fram)
+eval_pcr=result_input(pred_pcr,Y_test_fram)
+eval_pcr_H=result_input(pred_pcr_H,Y_test_fram)
+eval_pls=result_input(pred_pls,Y_test_fram)
+eval_gbrt=result_input(pred_gbrt,Y_test_fram)
+eval_gbrt_H=result_input(pred_gbrt_H,Y_test_fram)
+eval_nn1=result_input(pred_nn1,Y_test_fram)
+eval_nn2=result_input(pred_nn2,Y_test_fram)
+eval_nn3=result_input(pred_nn3,Y_test_fram)
+eval_nn4=result_input(pred_nn4,Y_test_fram)
+eval_nn5=result_input(pred_nn5,Y_test_fram)
+#mention: because samples of y valuse for testing code have no negative values, hence DR equal to 0,as well as MDD
 
-l=["OLS","OLS_H"]
-collect_np=np.concatenate([y_test_pred_ols,y_test_pred_ols_H],axis=1)
-collect=pd.DataFrame(collect_np,colunms=l)
-# y_predict=GBrt_H(X_train,Y_train,X_test)
+
+writer=pd.ExcelWriter("ml_literature_review_result_20231201.xlsx")
+
+eval_ols.round(2).to_excel(writer,sheet_name="ols")
+eval_ols.round(2).to_excel(writer,sheet_name="ols_H")
+eval_pcr.round(2).to_excel(writer,sheet_name="pcr")
+eval_pcr_H.round(2).to_excel(writer,sheet_name="pcr_H")
+eval_pls.round(2).to_excel(writer,sheet_name="pls")
+eval_gbrt.round(2).to_excel(writer,sheet_name="gbrt")
+eval_gbrt_H.round(2).to_excel(writer,sheet_name="gbrt_H")
+eval_nn1.round(2).to_excel(writer,sheet_name="nn1")
+eval_nn2.round(2).to_excel(writer,sheet_name="nn2")
+eval_nn3.round(2).to_excel(writer,sheet_name="nn3")
+eval_nn4.round(2).to_excel(writer,sheet_name="nn4")
+eval_nn5.round(2).to_excel(writer,sheet_name="nn5")
+
+writer.save()
