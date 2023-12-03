@@ -19,6 +19,8 @@ from sklearn.cross_decomposition import PLSRegression
 from sklearn.linear_model import Lasso
 from sklearn.linear_model import ElasticNet
 from sklearn.linear_model import SGDRegressor
+from sklearn.metrics import r2_score
+from sklearn.preprocessing import MinMaxScaler
 # import sklearn.preprocessing as sp
 # import sklearn.pipeline as pl
 import xgboost as xgb
@@ -29,7 +31,7 @@ from tensorflow.keras import regularizers
 
 import math
 import gc
-new_dir="D:\\replication\\datashare" ##change for your path 
+new_dir="D:\\replication\\datashare"
 os.chdir(new_dir)
 
  #############
@@ -75,7 +77,7 @@ def Pcr(X_train,Y_train,X_test,n_component="mle",Huber_robust=False):
     X_train_convert=fit.transform(X_train)
     X_test_convert=fit.transform(X_test)
     Y_predict=Ols(X_train_convert,Y_train,X_test_convert,Huber_robust)
-    return Y_predict
+    return Y_predict, 
 
 def PLS(X_train,Y_train,X_test,n_component=2):
     model = PLSRegression(n_components=n_component)
@@ -404,13 +406,56 @@ Y_train=Y_train_row.iloc[:,2]
 X_validation=X_validation_row.iloc[:,2:6]
 Y_validation=Y_validation_row.iloc[:,2]
 X_test=X_test_row.iloc[:,2:6]
+Y_test=Y_test_row.iloc[:,2]
 
 
+
+
+
+
+
+
+
+##variable importance
+def VI_cal(X_train,Y_train,X_validation,Y_validation,model_list):
+    
+    VI_list=pd.DataFrame(np.zeros((len(X_train.columns),len(model_list))),columns=model_list,index=X_train.columns)
+    R_square_vi=pd.DataFrame(np.zeros((len(X_train.columns),len(model_list))),columns=model_list,index=X_train.columns)
+    lis=list(X_train.columns)
+    lis.append('full train')
+    for i in lis:
+        if i != "full train":
+            X_train_vi=X_train.drop(i,axis=1)
+        y_test_pred_ols=Ols(X_train, Y_train, X_train,Huber_robust=False)
+        y_test_pred_ols_H=Ols(X_train, Y_train, X_train,Huber_robust=True)
+        y_test_pred_pcr,VI_pcr=Pcr(X_train, Y_train, X_train)
+        y_test_pred_pcr_H, VI_pcr=Pcr(X_train, Y_train, X_train,Huber_robust=True)
+        y_test_pred_pls=PLS(X_train, Y_train, X_train,n_component=2)
+        y_test_pred_gbrt=GBrt(X_train,Y_train,X_train,max_depth=2,n_trees=100,learning_rate=0.1,Huber_robust=False)
+        y_test_pred_gbrt_H=GBrt(X_train,Y_train,X_train,max_depth=2,n_trees=100,learning_rate=0.1,Huber_robust=True)
+        y_test_pred_rf=rf(X_train,Y_train,X_train,max_depth=6)
+        y_test_pred_nn1=nn1(X_train,Y_train,X_train,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
+        y_test_pred_nn2=nn2(X_train,Y_train,X_train,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
+        y_test_pred_nn3=nn3(X_train,Y_train,X_train,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
+        y_test_pred_nn4=nn4(X_train,Y_train,X_train,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
+        y_test_pred_nn5=nn5(X_train,Y_train,X_train,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
+        for j in model_list:
+            R_square_vi.loc[i,j]=r2_score(Y_train, eval("y_test_pred_"+j))
+            
+    R_square=R_square_vi.iloc[-1,:]-R_square_vi.iloc[:-1,:]
+    for j in list(VI_list.columns):
+        VI_list.loc[:,j]=(R_square.loc[:,j]-R_square.loc[:,j].min())/(R_square.loc[:,j].max()-R_square.loc[:,j].min())
+    return VI_list
+
+
+
+
+    
 # get the prediction of different models
-y_test_pred_ols=Ols(X_train, Y_train, X_test,Huber_robust=True)
+y_test_pred_ols=Ols(X_train, Y_train, X_test,Huber_robust=False)
 y_test_pred_ols_H=Ols(X_train, Y_train, X_test,Huber_robust=True)
-y_test_pred_pcr=Pcr(X_train, Y_train, X_test)
-y_test_pred_pcr_H=Pcr(X_train, Y_train, X_test,Huber_robust=True)
+y_test_pred_pcr,VI_pcr=Pcr(X_train, Y_train, X_test)
+y_test_pred_pcr_H, VI_pcr=Pcr(X_train, Y_train, X_test,Huber_robust=True)
 y_test_pred_pls=PLS(X_train, Y_train, X_test,n_component=2)
 y_test_pred_gbrt=GBrt(X_train,Y_train,X_test,max_depth=2,n_trees=100,learning_rate=0.1,Huber_robust=False)
 y_test_pred_gbrt_H=GBrt(X_train,Y_train,X_test,max_depth=2,n_trees=100,learning_rate=0.1,Huber_robust=True)
@@ -419,7 +464,8 @@ y_test_pred_nn1=nn1(X_train,Y_train,X_test,X_validation,Y_validation,l1=0.001,lr
 y_test_pred_nn2=nn2(X_train,Y_train,X_test,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
 y_test_pred_nn3=nn3(X_train,Y_train,X_test,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
 y_test_pred_nn4=nn4(X_train,Y_train,X_test,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
-y_test_pred_nn5=nn5(X_train,Y_train,X_test,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
+y_test_pred_nn5=nn5(X_train,Y_train,X_test,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)   
+   
 
 
 ##convert to panel data taht columns of shocks id and rows of date, covering y prediction
@@ -463,6 +509,16 @@ def result_input(pred,Y_test_fram):
 
     return  evaluation
 
+#Rsquare evaluation
+model_list=["ols","ols_H","pcr","pcr_H","pls","gbrt","gbrt_H","rf","nn1","nn2","nn3","nn4","nn5"]
+R_square_pred=pd.Series(range(len(model_list)),index=model_list)
+for i in model_list:
+    R_square_pred[i]=r2_score(Y_test, eval("y_test_pred_"+i))
+
+
+#variable importance
+VI=VI_cal(X_train,Y_train,X_validation,Y_validation,model_list)
+
 ##getting evaluation and output into Excel
 eval_ols=result_input(pred_ols,Y_test_fram)
 eval_ols_H=result_input(pred_ols_H,Y_test_fram)
@@ -479,8 +535,9 @@ eval_nn5=result_input(pred_nn5,Y_test_fram)
 #mention: because samples of y valuse for testing code have no negative values, hence DR equal to 0,as well as MDD
 
 
-writer=pd.ExcelWriter("ml_literature_review_result_20231201.xlsx")
-
+writer=pd.ExcelWriter("ml_literature_review_result_20231203.xlsx")
+R_square_pred.round(6).to_excel(writer,sheet_name="R2")
+VI.round(6).to_excel(writer,sheet_name="VI")
 eval_ols.round(2).to_excel(writer,sheet_name="ols")
 eval_ols.round(2).to_excel(writer,sheet_name="ols_H")
 eval_pcr.round(2).to_excel(writer,sheet_name="pcr")
@@ -495,3 +552,4 @@ eval_nn4.round(2).to_excel(writer,sheet_name="nn4")
 eval_nn5.round(2).to_excel(writer,sheet_name="nn5")
 
 writer.save()
+
