@@ -85,6 +85,24 @@ def PLS(X_train,Y_train,X_test,n_component=2):
     Y_predict=model.predict(X_test)
     return Y_predict
 
+
+def Ela(X_train, y_train, X_test, loss='huber', penalty='elasticnet', alpha=0.1, l1_ratio=0.5):
+    model = SGDRegressor(loss=loss, penalty=penalty, alpha=alpha, l1_ratio=l1_ratio)
+    model.fit(X_train, y_train)
+    Y_predict=model.predict(X_test)
+    return Y_predict
+
+#Generalized linear model (two-term spline series)   
+# def Glm(X_train, y_train, X_test):
+#     knots = np.linspace(0, 1, 5)
+#     bspline = sm.splines.bspline(X_train.flatten(), knots=knots, degree=2)
+#     X_train_bspline = bspline.design_matrix
+#     X_test_bspline = bspline(X_test.flatten())
+#     model = sm.GLM(y_train, X_train_bspline, family=sm.families.HuberT())
+#     result = model.fit()
+#     Y_predict = result.predict(X_test_bspline)
+#     return Y_predict
+
 #Generalized linear model (k-term spline series)   
 # def Glm_lasso(X_train,Y_train,X_test,alpha=0.5,K_trem=2,max_iter=1000):
 #     model=pl.make_pipeline(sp.PolynomialFeatures(K_trem), Lasso(alpha,max_iter=max_iter))
@@ -330,6 +348,38 @@ def perf_evaluation(collect):
     performance.columns=performance_name
     return performance
 
+##variable importance
+def VI_cal(X_train,Y_train,X_validation,Y_validation,model_list):
+    
+    VI_list=pd.DataFrame(np.zeros((len(X_train.columns),len(model_list))),columns=model_list,index=X_train.columns)
+    R_square_vi=pd.DataFrame(np.zeros((len(X_train.columns),len(model_list))),columns=model_list,index=X_train.columns)
+    lis=list(X_train.columns)
+    lis.append('full train')
+    for i in lis:
+        if i != "full train":
+            X_train_vi=X_train.drop(i,axis=1)
+        y_test_pred_ols=Ols(X_train, Y_train, X_train,Huber_robust=False)
+        y_test_pred_ols_H=Ols(X_train, Y_train, X_train,Huber_robust=True)
+        y_test_pred_pcr,VI_pcr=Pcr(X_train, Y_train, X_train)
+        y_test_pred_pcr_H, VI_pcr=Pcr(X_train, Y_train, X_train,Huber_robust=True)
+        y_test_pred_pls=PLS(X_train, Y_train, X_train,n_component=2)
+        y_test_pred_gbrt=GBrt(X_train,Y_train,X_train,max_depth=2,n_trees=100,learning_rate=0.1,Huber_robust=False)
+        y_test_pred_gbrt_H=GBrt(X_train,Y_train,X_train,max_depth=2,n_trees=100,learning_rate=0.1,Huber_robust=True)
+        y_test_pred_rf=rf(X_train,Y_train,X_train,max_depth=6)
+        y_test_pred_nn1=nn1(X_train,Y_train,X_train,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
+        y_test_pred_nn2=nn2(X_train,Y_train,X_train,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
+        y_test_pred_nn3=nn3(X_train,Y_train,X_train,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
+        y_test_pred_nn4=nn4(X_train,Y_train,X_train,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
+        y_test_pred_nn5=nn5(X_train,Y_train,X_train,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
+        for j in model_list:
+            R_square_vi.loc[i,j]=r2_score(Y_train, eval("y_test_pred_"+j))
+            
+    R_square=R_square_vi.iloc[-1,:]-R_square_vi.iloc[:-1,:]
+    for j in list(VI_list.columns):
+        VI_list.loc[:,j]=(R_square.loc[:,j]-R_square.loc[:,j].min())/(R_square.loc[:,j].max()-R_square.loc[:,j].min())
+    return VI_list
+
+
  #########
 #main body#
  #########
@@ -416,36 +466,8 @@ Y_test=Y_test_row.iloc[:,2]
 
 
 
-##variable importance
-def VI_cal(X_train,Y_train,X_validation,Y_validation,model_list):
-    
-    VI_list=pd.DataFrame(np.zeros((len(X_train.columns),len(model_list))),columns=model_list,index=X_train.columns)
-    R_square_vi=pd.DataFrame(np.zeros((len(X_train.columns),len(model_list))),columns=model_list,index=X_train.columns)
-    lis=list(X_train.columns)
-    lis.append('full train')
-    for i in lis:
-        if i != "full train":
-            X_train_vi=X_train.drop(i,axis=1)
-        y_test_pred_ols=Ols(X_train, Y_train, X_train,Huber_robust=False)
-        y_test_pred_ols_H=Ols(X_train, Y_train, X_train,Huber_robust=True)
-        y_test_pred_pcr,VI_pcr=Pcr(X_train, Y_train, X_train)
-        y_test_pred_pcr_H, VI_pcr=Pcr(X_train, Y_train, X_train,Huber_robust=True)
-        y_test_pred_pls=PLS(X_train, Y_train, X_train,n_component=2)
-        y_test_pred_gbrt=GBrt(X_train,Y_train,X_train,max_depth=2,n_trees=100,learning_rate=0.1,Huber_robust=False)
-        y_test_pred_gbrt_H=GBrt(X_train,Y_train,X_train,max_depth=2,n_trees=100,learning_rate=0.1,Huber_robust=True)
-        y_test_pred_rf=rf(X_train,Y_train,X_train,max_depth=6)
-        y_test_pred_nn1=nn1(X_train,Y_train,X_train,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
-        y_test_pred_nn2=nn2(X_train,Y_train,X_train,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
-        y_test_pred_nn3=nn3(X_train,Y_train,X_train,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
-        y_test_pred_nn4=nn4(X_train,Y_train,X_train,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
-        y_test_pred_nn5=nn5(X_train,Y_train,X_train,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
-        for j in model_list:
-            R_square_vi.loc[i,j]=r2_score(Y_train, eval("y_test_pred_"+j))
-            
-    R_square=R_square_vi.iloc[-1,:]-R_square_vi.iloc[:-1,:]
-    for j in list(VI_list.columns):
-        VI_list.loc[:,j]=(R_square.loc[:,j]-R_square.loc[:,j].min())/(R_square.loc[:,j].max()-R_square.loc[:,j].min())
-    return VI_list
+
+
 
 
 
@@ -454,9 +476,10 @@ def VI_cal(X_train,Y_train,X_validation,Y_validation,model_list):
 # get the prediction of different models
 y_test_pred_ols=Ols(X_train, Y_train, X_test,Huber_robust=False)
 y_test_pred_ols_H=Ols(X_train, Y_train, X_test,Huber_robust=True)
-y_test_pred_pcr,VI_pcr=Pcr(X_train, Y_train, X_test)
-y_test_pred_pcr_H, VI_pcr=Pcr(X_train, Y_train, X_test,Huber_robust=True)
+y_test_pred_pcr=Pcr(X_train, Y_train, X_test)
+y_test_pred_pcr_H=Pcr(X_train, Y_train, X_test,Huber_robust=True)
 y_test_pred_pls=PLS(X_train, Y_train, X_test,n_component=2)
+y_test_pred_ela_H=Ela(X_train, Y_train, X_test)
 y_test_pred_gbrt=GBrt(X_train,Y_train,X_test,max_depth=2,n_trees=100,learning_rate=0.1,Huber_robust=False)
 y_test_pred_gbrt_H=GBrt(X_train,Y_train,X_test,max_depth=2,n_trees=100,learning_rate=0.1,Huber_robust=True)
 y_test_pred_rf=rf(X_train,Y_train,X_test,max_depth=6)
@@ -490,6 +513,7 @@ pred_ols_H=panel_convert(y_test_pred_ols_H,Y_test_row)
 pred_pcr=panel_convert(y_test_pred_pcr,Y_test_row)
 pred_pcr_H=panel_convert(y_test_pred_pcr_H,Y_test_row)
 pred_pls=panel_convert(y_test_pred_pls,Y_test_row)
+pred_ela_H=panel_convert(y_test_pred_ela_H,Y_test_row)
 pred_gbrt=panel_convert(y_test_pred_gbrt,Y_test_row)
 pred_gbrt_H=panel_convert(y_test_pred_gbrt_H,Y_test_row)
 pred_rf=panel_convert(y_test_pred_rf,Y_test_row)
@@ -510,7 +534,7 @@ def result_input(pred,Y_test_fram):
     return  evaluation
 
 #Rsquare evaluation
-model_list=["ols","ols_H","pcr","pcr_H","pls","gbrt","gbrt_H","rf","nn1","nn2","nn3","nn4","nn5"]
+model_list=["ols","ols_H","pcr","pcr_H","pls","ela_H","gbrt","gbrt_H","rf","nn1","nn2","nn3","nn4","nn5"]
 R_square_pred=pd.Series(range(len(model_list)),index=model_list)
 for i in model_list:
     R_square_pred[i]=r2_score(Y_test, eval("y_test_pred_"+i))
@@ -525,6 +549,7 @@ eval_ols_H=result_input(pred_ols_H,Y_test_fram)
 eval_pcr=result_input(pred_pcr,Y_test_fram)
 eval_pcr_H=result_input(pred_pcr_H,Y_test_fram)
 eval_pls=result_input(pred_pls,Y_test_fram)
+eval_ela_H=result_input(pred_ela_H,Y_test_fram)
 eval_gbrt=result_input(pred_gbrt,Y_test_fram)
 eval_gbrt_H=result_input(pred_gbrt_H,Y_test_fram)
 eval_nn1=result_input(pred_nn1,Y_test_fram)
@@ -543,6 +568,7 @@ eval_ols.round(2).to_excel(writer,sheet_name="ols_H")
 eval_pcr.round(2).to_excel(writer,sheet_name="pcr")
 eval_pcr_H.round(2).to_excel(writer,sheet_name="pcr_H")
 eval_pls.round(2).to_excel(writer,sheet_name="pls")
+eval_ela_H.round(2).to_excel(writer,sheet_name="Ela_H")
 eval_gbrt.round(2).to_excel(writer,sheet_name="gbrt")
 eval_gbrt_H.round(2).to_excel(writer,sheet_name="gbrt_H")
 eval_nn1.round(2).to_excel(writer,sheet_name="nn1")
