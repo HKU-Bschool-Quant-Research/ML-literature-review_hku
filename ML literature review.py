@@ -25,6 +25,7 @@ from sklearn.preprocessing import MinMaxScaler
 # import sklearn.pipeline as pl
 import xgboost as xgb
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import GridSearchCV
 from sklearn.neural_network import MLPRegressor
 import tensorflow as tf
 from tensorflow.keras import regularizers
@@ -77,9 +78,9 @@ def Pcr(X_train,Y_train,X_test,n_component="mle",Huber_robust=False):
     X_train_convert=fit.transform(X_train)
     X_test_convert=fit.transform(X_test)
     Y_predict=Ols(X_train_convert,Y_train,X_test_convert,Huber_robust)
-    return Y_predict, 
+    return Y_predict
 
-def PLS(X_train,Y_train,X_test,n_component=2):
+def PLS(X_train,Y_train,X_test,n_component=15):
     model = PLSRegression(n_components=n_component)
     model.fit(X_train,Y_train)
     Y_predict=model.predict(X_test)
@@ -135,22 +136,90 @@ def Ela(X_train, y_train, X_test, loss='huber', penalty='elasticnet', alpha=0.1,
 #     return Y_prediction
 
 
-def GBrt(X_train,Y_train,X_test,max_depth=2,n_trees=100,learning_rate=0.1,Huber_robust=False): #following xiu's paper, tree hyperparameters need to tune, include maximum depth, number of trees in ensemble and shrinking shrinkage weight(learning rate)  
-    model = xgb.XGBRegressor(max_depth=max_depth,reg_lambda=1,n_estimators=n_trees,learning_rate=learning_rate,random_state=1) #reg_lambda=1 means training with l2 impurity. 
-    model.fit(X_train, Y_train)
-    Y_predict = model.predict(X_test)
+def GBrt(X_train,Y_train,X_test,max_depth=2,n_trees=500,learning_rate=0.1,Huber_robust=False,X_validation='None',Y_validation='None'): #following xiu's paper, tree hyperparameters need to tune, include maximum depth, number of trees in ensemble and shrinking shrinkage weight(learning rate)  
+    if type(X_validation)==type("None"):
+        model = xgb.XGBRegressor(max_depth=max_depth,reg_lambda=1,n_estimators=n_trees,learning_rate=learning_rate,random_state=1) #reg_lambda=1 means training with l2 impurity. 
+        model.fit(X_train, Y_train)
+        Y_predict = model.predict(X_test)
+    else:
+        t=0
+        best_entree=n_trees
+        best_lr=learning_rate
+        for n_trees in range(100,1000,200): ##
+            for learning_rate in range(0.1,1,0.1):
+                model = xgb.XGBRegressor(max_depth=max_depth,reg_lambda=1,n_estimators=n_trees,learning_rate=learning_rate,random_state=1) #reg_lambda=1 means training with l2 impurity. 
+                model.fit(X_train, Y_train)
+                Y_pred_val = model.predict(X_validation)
+                r2_sc=r2_score(Y_validation, Y_pred_val)
+                t+=1
+                if t==1:
+                    r2score=r2_sc                
+                if r2_sc>=r2score:
+                    r2score=r2_sc
+                    best_entree= n_trees
+                    best_lr= learning_rate
+        X_train=pd.concat([X_train,X_validation],axis=0)
+        Y_train=pd.concat([Y_train,Y_validation],axis=0)     
+        model = xgb.XGBRegressor(max_depth=max_depth,reg_lambda=1,n_estimators=best_entree,learning_rate=best_lr,random_state=1) #reg_lambda=1 means training with l2 impurity. 
+        model.fit(X_train, Y_train)
+        Y_predict = model.predict(X_test)
     return Y_predict
 
-def GBrt_H(X_train,Y_train,X_test,max_depth=2,n_trees=100,learning_rate=0.1,Huber_robust=False): #following xiu's paper, tree hyperparameters need to tune, include maximum depth, number of trees in ensemble and shrinking shrinkage weight(learning rate)  
-    model = xgb.XGBRegressor(objective="reg:pseudohubererror",max_depth=max_depth,reg_lambda=1,n_estimators=n_trees,learning_rate=learning_rate,random_state=1) #reg_lambda=1 means training with l2 impurity. 
-    model.fit(X_train, Y_train)
-    Y_predict = model.predict(X_test)
+def GBrt_H(X_train,Y_train,X_test,max_depth=2,n_trees=500,learning_rate=0.1,Huber_robust=False,X_validation='None',Y_validation='None'): #following xiu's paper, tree hyperparameters need to tune, include maximum depth, number of trees in ensemble and shrinking shrinkage weight(learning rate)  
+    if type(X_validation)==type("None"):
+        model = xgb.XGBRegressor(objective="reg:pseudohubererror",max_depth=max_depth,reg_lambda=1,n_estimators=n_trees,learning_rate=learning_rate,random_state=1) #reg_lambda=1 means training with l2 impurity. 
+        model.fit(X_train, Y_train)
+        Y_predict = model.predict(X_test)
+    else:
+        t=0
+        best_entree=n_trees
+        best_lr=learning_rate
+        for n_trees in range(100,1000,200): ##
+            for learning_rate in range(0.1,1,0.1):
+                model = xgb.XGBRegressor(objective="reg:pseudohubererror",max_depth=max_depth,reg_lambda=1,n_estimators=n_trees,learning_rate=learning_rate,random_state=1) #reg_lambda=1 means training with l2 impurity. 
+                model.fit(X_train, Y_train)
+                Y_pred_val = model.predict(X_validation)
+                r2_sc=r2_score(Y_validation, Y_pred_val)
+                t+=1
+                if t==1:
+                    r2score=r2_sc
+                if r2_sc>=r2score:
+                    r2score=r2_sc
+                    best_entree= n_trees
+                    best_lr= learning_rate
+        X_train=pd.concat([X_train,X_validation],axis=0)
+        Y_train=pd.concat([Y_train,Y_validation],axis=0)     
+        model = xgb.XGBRegressor(objective="reg:pseudohubererror",max_depth=max_depth,reg_lambda=1,n_estimators=best_entree,learning_rate=best_lr,random_state=1) #reg_lambda=1 means training with l2 impurity. 
+        model.fit(X_train, Y_train)
+        Y_predict = model.predict(X_test)
     return Y_predict
 
-def rf(X_train,Y_train,X_test,max_depth=6): #Depth L of the trees and number of bootstrap samples B are the tuning parameters optimized via validation
-    model = RandomForestRegressor(max_depth=max_depth,n_estimators=300,max_features="sqrt",random_state=1)
-    model.fit(X_train, Y_train)
-    Y_prediction = model.predict(X_test)
+
+def rf(X_train,Y_train,X_test,max_depth=6,n_estimator=300,X_validation='None',Y_validation='None'): #Depth L of the trees and number of bootstrap samples B are the tuning parameters optimized via validation
+    if type(X_validation)==type("None"):
+        model=RandomForestRegressor(max_depth=max_depth,n_estimators=n_estimator,max_features="sqrt",random_state=1)
+        model.fit(X_train, Y_train)    
+        Y_prediction = model.predict(X_test)
+    else:
+        t=0
+        best_estimators=100
+        for nest in range(100,1000,100):      
+            model=RandomForestRegressor(max_depth=max_depth,n_estimators=nest,max_features="sqrt",random_state=1)
+            model.fit(X_train, Y_train)
+            Y_pred_val=model.predict(X_validation)
+            r2_sc=r2_score(Y_validation, Y_pred_val)
+            t+=1
+            if t==1:
+               r2score=r2_sc
+            if r2_sc>r2score:
+                r2score=r2_sc
+                best_estimators=nest
+                
+        X_train=pd.concat([X_train,X_validation],axis=0)
+        Y_train=pd.concat([Y_train,Y_validation],axis=0)
+        model=RandomForestRegressor(max_depth=max_depth,n_estimators=best_estimators,max_features="sqrt",random_state=1)
+        model.fit(X_train, Y_train)    
+        Y_prediction = model.predict(X_test)
     return Y_prediction
 
  #############
@@ -165,7 +234,7 @@ def nn1(X_train,Y_train,X_test,X_validation,Y_validation,l1=0.001,lr=0.01,random
     model.add(tf.keras.layers.Dense(1,activation="relu"))
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=lr),loss="mean_squared_error")
     callback=tf.keras.callbacks.EarlyStopping(monitor="loss",patience=5)
-    model.fit(X_train,Y_train,validation_data=(X_validation,Y_validation),epochs=100,batch_size=10000,callbacks=[callback])
+    model.fit(X_train,Y_train,validation_data=(X_validation,Y_validation),epochs=100,batch_size=5000,callbacks=[callback])
     Y_predict=model.predict(X_test)
     return Y_predict
 
@@ -179,7 +248,7 @@ def nn2(X_train,Y_train,X_test,X_validation,Y_validation,l1=0.001,lr=0.01,random
     model.add(tf.keras.layers.Dense(1,activation="relu"))
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=lr),loss="mean_squared_error")
     callback=tf.keras.callbacks.EarlyStopping(monitor="loss",patience=5)
-    model.fit(X_train,Y_train,validation_data=(X_validation,Y_validation),epochs=100,batch_size=10000,callbacks=[callback])
+    model.fit(X_train,Y_train,validation_data=(X_validation,Y_validation),epochs=100,batch_size=5000,callbacks=[callback])
     Y_predict=model.predict(X_test)
     return Y_predict
 
@@ -196,7 +265,7 @@ def nn3(X_train,Y_train,X_test,X_validation,Y_validation,l1=0.001,lr=0.01,random
     model.add(tf.keras.layers.Dense(1,activation="relu"))
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=lr),loss="mean_squared_error")
     callback=tf.keras.callbacks.EarlyStopping(monitor="loss",patience=5)
-    model.fit(X_train,Y_train,validation_data=(X_validation,Y_validation),epochs=100,batch_size=10000,callbacks=[callback])
+    model.fit(X_train,Y_train,validation_data=(X_validation,Y_validation),epochs=100,batch_size=5000,callbacks=[callback])
     Y_predict=model.predict(X_test)
     return Y_predict
 
@@ -214,7 +283,7 @@ def nn4(X_train,Y_train,X_test,X_validation,Y_validation,l1=0.001,lr=0.01,random
     model.add(tf.keras.layers.Dense(1,activation="relu"))
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=lr),loss="mean_squared_error")
     callback=tf.keras.callbacks.EarlyStopping(monitor="loss",patience=5)
-    model.fit(X_train,Y_train,validation_data=(X_validation,Y_validation),epochs=100,batch_size=10000,callbacks=[callback])
+    model.fit(X_train,Y_train,validation_data=(X_validation,Y_validation),epochs=100,batch_size=5000,callbacks=[callback])
     Y_predict=model.predict(X_test)
     return Y_predict
 
@@ -234,7 +303,7 @@ def nn5(X_train,Y_train,X_test,X_validation,Y_validation,l1=0.001,lr=0.01,random
     model.add(tf.keras.layers.Dense(1,activation="relu"))
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=lr),loss="mean_squared_error")
     callback=tf.keras.callbacks.EarlyStopping(monitor="loss",patience=5)
-    model.fit(X_train,Y_train,epochs=100,validation_data=(X_validation,Y_validation),batch_size=10000,callbacks=[callback])
+    model.fit(X_train,Y_train,epochs=100,validation_data=(X_validation,Y_validation),batch_size=5000,callbacks=[callback])
     Y_predict=model.predict(X_test)
 
     return Y_predict
@@ -324,6 +393,7 @@ def perf_evaluation(collect):
         temporary_max=0
         mdd=[]
         accumulate_list=[]
+        max_time=1
         for i in range(month_numbers):
             date= collect.index[i]
             accumulate+=collect.loc[date,j]
@@ -350,7 +420,6 @@ def perf_evaluation(collect):
 
 ##variable importance
 def VI_cal(X_train,Y_train,X_validation,Y_validation,model_list):
-    
     VI_list=pd.DataFrame(np.zeros((len(X_train.columns),len(model_list))),columns=model_list,index=X_train.columns)
     R_square_vi=pd.DataFrame(np.zeros((len(X_train.columns),len(model_list))),columns=model_list,index=X_train.columns)
     lis=list(X_train.columns)
@@ -358,19 +427,23 @@ def VI_cal(X_train,Y_train,X_validation,Y_validation,model_list):
     for i in lis:
         if i != "full train":
             X_train_vi=X_train.drop(i,axis=1)
-        y_test_pred_ols=Ols(X_train, Y_train, X_train,Huber_robust=False)
-        y_test_pred_ols_H=Ols(X_train, Y_train, X_train,Huber_robust=True)
-        y_test_pred_pcr,VI_pcr=Pcr(X_train, Y_train, X_train)
-        y_test_pred_pcr_H, VI_pcr=Pcr(X_train, Y_train, X_train,Huber_robust=True)
-        y_test_pred_pls=PLS(X_train, Y_train, X_train,n_component=2)
-        y_test_pred_gbrt=GBrt(X_train,Y_train,X_train,max_depth=2,n_trees=100,learning_rate=0.1,Huber_robust=False)
-        y_test_pred_gbrt_H=GBrt(X_train,Y_train,X_train,max_depth=2,n_trees=100,learning_rate=0.1,Huber_robust=True)
-        y_test_pred_rf=rf(X_train,Y_train,X_train,max_depth=6)
-        y_test_pred_nn1=nn1(X_train,Y_train,X_train,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
-        y_test_pred_nn2=nn2(X_train,Y_train,X_train,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
-        y_test_pred_nn3=nn3(X_train,Y_train,X_train,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
-        y_test_pred_nn4=nn4(X_train,Y_train,X_train,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
-        y_test_pred_nn5=nn5(X_train,Y_train,X_train,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
+        else:
+            X_train_vi=X_train
+        y_test_pred_ols=Ols(X_train_vi, Y_train, X_train_vi,Huber_robust=False)
+        y_test_pred_ols_H=Ols(X_train_vi, Y_train, X_train_vi,Huber_robust=True)
+        y_test_pred_pcr=Pcr(X_train_vi, Y_train, X_train_vi)
+        y_test_pred_pcr_H=Pcr(X_train_vi, Y_train, X_train_vi,Huber_robust=True)
+        y_test_pred_pls=PLS(X_train_vi, Y_train, X_train_vi,n_component=2)
+        y_test_pred_ela_H=Ela(X_train_vi, Y_train, X_train_vi)
+        y_test_pred_gbrt=GBrt(X_train_vi,Y_train,X_train_vi,max_depth=2,n_trees=100,learning_rate=0.1,Huber_robust=False)
+        y_test_pred_gbrt_H=GBrt(X_train_vi,Y_train,X_train_vi,max_depth=2,n_trees=100,learning_rate=0.1,Huber_robust=True)
+        y_test_pred_rf=rf(X_train_vi,Y_train,X_train_vi,max_depth=6)
+        y_test_pred_nn1=nn1(X_train_vi,Y_train,X_train_vi,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
+        y_test_pred_nn2=nn2(X_train_vi,Y_train,X_train_vi,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
+        y_test_pred_nn3=nn3(X_train_vi,Y_train,X_train_vi,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
+        y_test_pred_nn4=nn4(X_train_vi,Y_train,X_train_vi,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
+        y_test_pred_nn5=nn5(X_train_vi,Y_train,X_train_vi,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
+
         for j in model_list:
             R_square_vi.loc[i,j]=r2_score(Y_train, eval("y_test_pred_"+j))
             
@@ -393,18 +466,33 @@ def VI_cal(X_train,Y_train,X_validation,Y_validation,model_list):
  ################################
 # from sklearn.model_selection import train_test_split    
 #import data
-nrow=50000
-data_row= pd.read_csv("datashare.csv",nrows=nrow)
-factor_name=data_row.columns
+nrow=10000
+data_row= pd.read_csv("chars60_rank_2000s.csv",nrows=nrow)
+data_row=data_row.drop(['sic','gvkey'],axis=1) #delete lable of stock indicator and redundant industry label
+#nrow=len(data_row.index)
+
+#conver normal variable to dummy variant
+ffi49_dummy= pd.get_dummies(data_row['ffi49'],drop_first=False,prefix='ffi49')
+year_dummy= pd.get_dummies(data_row['year'],drop_first=False,prefix='year')
+data_row=data_row.drop(['ffi49','year'],axis=1)
+data=pd.concat([ffi49_dummy,data_row],axis=1)
+#data=data_row
+data['date']=pd.to_datetime(data['date']).dt.strftime("%Y%m%d").astype(int)
+data['ret']=data['ret']*100
+data.sort_values(by='date',ascending=True,inplace=True)
+data.reset_index()
+#factor_name=data_row.columns
+
 # from sklearn.model_selection import train_test_split
 
 ##Data clearning (drop data that missing value of y, and fill x with means)
-data=data_row.iloc[:,:7]
-data=data.dropna(subset=list(data_row.columns)[6],inplace=False)
-for i in range(7):
-    data.iloc[:,i].fillna(value=data.iloc[:,i].mean(),inplace=True)
-X=data.iloc[:,:6]
-y=data.iloc[:,[0,1,6]]
+# data=data_row.iloc[:,:7]
+# data=data.dropna(subset=list(data_row.columns)[6],inplace=False)
+# for i in range(7):
+#     data.iloc[:,i].fillna(value=data.iloc[:,i].mean(),inplace=True)
+y=data[['permno','date','ret']]
+X=data.drop('ret',axis=1)
+
 
 ## 60% training set, 20% validation set and 20% test set
 train_set_number=int(nrow*0.6)
@@ -450,14 +538,13 @@ Y_test_row=y.iloc[train_set_number+val_set_number:,:]
 # del test_data
 # gc.collect()
 
-##extract factor
-X_train=X_train_row.iloc[:,2:6]
-Y_train=Y_train_row.iloc[:,2]
-X_validation=X_validation_row.iloc[:,2:6]
-Y_validation=Y_validation_row.iloc[:,2]
-X_test=X_test_row.iloc[:,2:6]
-Y_test=Y_test_row.iloc[:,2]
-
+#extract factor
+X_train=X_train_row.drop(['permno','date'],axis=1)
+Y_train=Y_train_row.drop(['permno','date'],axis=1)
+X_validation=X_validation_row.drop(['permno','date'],axis=1)
+Y_validation=Y_validation_row.drop(['permno','date'],axis=1)
+X_test=X_test_row.drop(['permno','date'],axis=1)
+Y_test=Y_test_row.drop(['permno','date'],axis=1)
 
 
 
@@ -478,11 +565,11 @@ y_test_pred_ols=Ols(X_train, Y_train, X_test,Huber_robust=False)
 y_test_pred_ols_H=Ols(X_train, Y_train, X_test,Huber_robust=True)
 y_test_pred_pcr=Pcr(X_train, Y_train, X_test)
 y_test_pred_pcr_H=Pcr(X_train, Y_train, X_test,Huber_robust=True)
-y_test_pred_pls=PLS(X_train, Y_train, X_test,n_component=2)
+y_test_pred_pls=PLS(X_train, Y_train, X_test,n_component=5)
 y_test_pred_ela_H=Ela(X_train, Y_train, X_test)
-y_test_pred_gbrt=GBrt(X_train,Y_train,X_test,max_depth=2,n_trees=100,learning_rate=0.1,Huber_robust=False)
-y_test_pred_gbrt_H=GBrt(X_train,Y_train,X_test,max_depth=2,n_trees=100,learning_rate=0.1,Huber_robust=True)
-y_test_pred_rf=rf(X_train,Y_train,X_test,max_depth=6)
+y_test_pred_gbrt=GBrt(X_train,Y_train,X_test,max_depth=5,n_trees=1000,learning_rate=0.1,Huber_robust=False)
+y_test_pred_gbrt_H=GBrt(X_train,Y_train,X_test,max_depth=5,n_trees=1000,learning_rate=0.1,Huber_robust=True)
+y_test_pred_rf=rf(X_train,Y_train,X_test,max_depth=6,n_estimator=300,X_validation=X_validation,Y_validation=Y_validation)
 y_test_pred_nn1=nn1(X_train,Y_train,X_test,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
 y_test_pred_nn2=nn2(X_train,Y_train,X_test,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
 y_test_pred_nn3=nn3(X_train,Y_train,X_test,X_validation,Y_validation,l1=0.001,lr=0.01,random_seed=1)
@@ -492,7 +579,7 @@ y_test_pred_nn5=nn5(X_train,Y_train,X_test,X_validation,Y_validation,l1=0.001,lr
 
 
 ##convert to panel data taht columns of shocks id and rows of date, covering y prediction
-Y_test_fram=Y_test_row.set_index(["DATE","permno"])[Y_test_row.columns[2]]
+Y_test_fram=Y_test_row.set_index(["date","permno"])[Y_test_row.columns[2]]
 Y_test_fram=Y_test_fram.unstack()
 
 
@@ -502,7 +589,7 @@ def panel_convert(y_test_pred_model,Y_test_row):
         y_test_pred_model=pd.DataFrame(y_test_pred_model,index=Y_test_row.index)
 
     y_test_pred=pd.concat([Y_test_row.iloc[:,:2],y_test_pred_model],axis=1)
-    y_test_pred=y_test_pred.set_index(["DATE","permno"])[y_test_pred.columns[2]]
+    y_test_pred=y_test_pred.set_index(["date","permno"])[y_test_pred.columns[2]]
     y_test_pred=y_test_pred.unstack()
     return y_test_pred
 
@@ -537,11 +624,12 @@ def result_input(pred,Y_test_fram):
 model_list=["ols","ols_H","pcr","pcr_H","pls","ela_H","gbrt","gbrt_H","rf","nn1","nn2","nn3","nn4","nn5"]
 R_square_pred=pd.Series(range(len(model_list)),index=model_list)
 for i in model_list:
-    R_square_pred[i]=r2_score(Y_test, eval("y_test_pred_"+i))
+    R_square_pred[i]=r2_score(Y_test, eval("y_test_pred_%s" %i))
+
 
 
 #variable importance
-VI=VI_cal(X_train,Y_train,X_validation,Y_validation,model_list)
+#VI=VI_cal(X_train,Y_train,X_validation,Y_validation,model_list)
 
 ##getting evaluation and output into Excel
 eval_ols=result_input(pred_ols,Y_test_fram)
@@ -552,30 +640,38 @@ eval_pls=result_input(pred_pls,Y_test_fram)
 eval_ela_H=result_input(pred_ela_H,Y_test_fram)
 eval_gbrt=result_input(pred_gbrt,Y_test_fram)
 eval_gbrt_H=result_input(pred_gbrt_H,Y_test_fram)
+eval_rf=result_input(pred_rf,Y_test_fram)
 eval_nn1=result_input(pred_nn1,Y_test_fram)
 eval_nn2=result_input(pred_nn2,Y_test_fram)
 eval_nn3=result_input(pred_nn3,Y_test_fram)
 eval_nn4=result_input(pred_nn4,Y_test_fram)
 eval_nn5=result_input(pred_nn5,Y_test_fram)
+
+eval_total=pd.DataFrame(columns=eval_ols.columns,index=model_list)
+for i in model_list:
+    eval_total.loc[i]=eval("eval_%s" %i).loc['H-L',:]
 #mention: because samples of y valuse for testing code have no negative values, hence DR equal to 0,as well as MDD
 
 
-writer=pd.ExcelWriter("ml_literature_review_result_20231203.xlsx")
+writer=pd.ExcelWriter("ml_literature_review_result_20240103.xlsx")
+round_number=6
 R_square_pred.round(6).to_excel(writer,sheet_name="R2")
-VI.round(6).to_excel(writer,sheet_name="VI")
-eval_ols.round(2).to_excel(writer,sheet_name="ols")
-eval_ols.round(2).to_excel(writer,sheet_name="ols_H")
-eval_pcr.round(2).to_excel(writer,sheet_name="pcr")
-eval_pcr_H.round(2).to_excel(writer,sheet_name="pcr_H")
-eval_pls.round(2).to_excel(writer,sheet_name="pls")
-eval_ela_H.round(2).to_excel(writer,sheet_name="Ela_H")
-eval_gbrt.round(2).to_excel(writer,sheet_name="gbrt")
-eval_gbrt_H.round(2).to_excel(writer,sheet_name="gbrt_H")
-eval_nn1.round(2).to_excel(writer,sheet_name="nn1")
-eval_nn2.round(2).to_excel(writer,sheet_name="nn2")
-eval_nn3.round(2).to_excel(writer,sheet_name="nn3")
-eval_nn4.round(2).to_excel(writer,sheet_name="nn4")
-eval_nn5.round(2).to_excel(writer,sheet_name="nn5")
+#VI.round(6).to_excel(writer,sheet_name="VI") ##to laege
+eval_total.round(round_number).to_excel(writer,sheet_name="evaluation")
+eval_ols.round(round_number).to_excel(writer,sheet_name="ols")
+eval_ols.round(round_number).to_excel(writer,sheet_name="ols_H")
+eval_pcr.round(round_number).to_excel(writer,sheet_name="pcr")
+eval_pcr_H.round(round_number).to_excel(writer,sheet_name="pcr_H")
+eval_pls.round(round_number).to_excel(writer,sheet_name="pls")
+eval_ela_H.round(round_number).to_excel(writer,sheet_name="Ela_H")
+eval_gbrt.round(round_number).to_excel(writer,sheet_name="gbrt")
+eval_gbrt_H.round(round_number).to_excel(writer,sheet_name="gbrt_H")
+eval_rf.round(round_number).to_excel(writer,sheet_name="rf")
+eval_nn1.round(round_number).to_excel(writer,sheet_name="nn1")
+eval_nn2.round(round_number).to_excel(writer,sheet_name="nn2")
+eval_nn3.round(round_number).to_excel(writer,sheet_name="nn3")
+eval_nn4.round(round_number).to_excel(writer,sheet_name="nn4")
+eval_nn5.round(round_number).to_excel(writer,sheet_name="nn5")
 
 writer.save()
 
